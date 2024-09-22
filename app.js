@@ -2,177 +2,202 @@ const dotenv = require("dotenv").config();
 const puppeteer = require("puppeteer");
 const fs = require("fs");
 const path = require("path");
+const axios = require("axios");
 
+// Use an async function for the main script execution
 (async () => {
-  // Lancer une session de navigateur
+  // Launch a browser session in non-headless mode (visible) with maximized window
   const browser = await puppeteer.launch({ headless: false, args: ["--start-maximized"] });
   const page = await browser.newPage();
 
-  // Récupérer la taille de l'écran
+  // Retrieve screen dimensions from the page
   const screen = await page.evaluate(() => ({
     width: window.screen.width,
     height: window.screen.height,
   }));
 
-  // Définir le viewport avec la taille complète de l'écran
+  // Set the browser viewport to match the full screen size
   await page.setViewport({
     width: screen.width,
     height: screen.height,
   });
 
-  // Aller à la page de connexion
+  // Navigate to the login page of the target site
   await page.goto("https://apollo.lereacteur.io/");
 
-  // Valider la connexion
+  // Wait for the email input field to load, then type the email from environment variables
   await page.waitForSelector('input[name="email"]');
   await page.type('input[name="email"]', process.env.EMAIL);
 
+  // Wait for the password field, type the password from environment variables, and click the login button
   await page.waitForSelector('input[name="password"]');
   await page.type('input[name="password"]', process.env.PW);
   await page.click("button.zenstyle-16r8c7u");
 
-  // Sélectionner le cours
+  // Wait for and click a specific course link after logging in
   await page.waitForSelector("a.zenstyle-shm7tl");
   await page.click("a.zenstyle-shm7tl");
 
-  // Fonction pour cliquer sur les enfants svg avec la classe 'zenstyle-13jaz8d'
+  // Function to click all SVG child elements within a specific div class
   async function clickOnSvgIcons() {
-    // Attendre que le div parent avec la classe 'zenstyle-8lyrwn' soit chargé
-    await page.waitForSelector("div.zenstyle-8lyrwn");
+    await page.waitForSelector("div.zenstyle-8lyrwn"); // Wait for the parent div to load
+    const svgs = await page.$$("div.zenstyle-8lyrwn svg.zenstyle-13jaz8d"); // Select SVG elements
 
-    // Sélectionner tous les svg enfants avec la classe 'zenstyle-13jaz8d'
-    const svgs = await page.$$("div.zenstyle-8lyrwn svg.zenstyle-13jaz8d");
-
-    // Boucler sur les svg et cliquer sur chaque élément
+    // Loop through and click each SVG element
     for (const svg of svgs) {
       await svg.click();
     }
   }
 
-  // Appel de la fonction pour cliquer sur les icônes SVG
+  // Call the function to click the SVG icons
   await clickOnSvgIcons();
 
-  // Fonction pour cliquer sur tous les SVG enfants de tous les div.zenstyle-1d785g7, en ignorant le premier de chaque div
+  // Function to click all SVG elements within specific divs, skipping the first SVG of each div
   async function clickOnAllSvgInAllSpecificDivs() {
-    // Attendre que les divs avec la classe 'zenstyle-1d785g7' soient chargés
-    await page.waitForSelector("div.zenstyle-1d785g7");
+    await page.waitForSelector("div.zenstyle-1d785g7"); // Wait for the divs to load
+    const allDivs = await page.$$("div.zenstyle-1d785g7"); // Select all divs with a specific class
 
-    // Sélectionner tous les divs avec la classe 'zenstyle-1d785g7'
-    const allDivs = await page.$$("div.zenstyle-1d785g7");
-
-    // Boucler sur chaque div
+    // Loop through each div and its child SVGs
     for (const div of allDivs) {
-      // Sélectionner tous les svg qui sont enfants de ce div
-      const svgs = await div.$$("svg");
+      const svgs = await div.$$("svg"); // Select all SVGs in the current div
 
-      // Boucler sur chaque SVG, en commençant par le deuxième (index 1)
+      // Loop through all SVGs, starting from the second one (index 1)
       for (let i = 1; i < svgs.length; i++) {
-        const svg = svgs[i]; // Prendre le SVG à l'index i
+        const svg = svgs[i];
         try {
-          // Vérifier si le SVG est encore attaché au DOM avant d'essayer de cliquer
+          // Check if the SVG is still attached to the DOM, then click it
           const isConnected = await page.evaluate((element) => element.isConnected, svg);
-
           if (isConnected) {
-            // Faire défiler jusqu'à l'élément si nécessaire et cliquer
-            await svg.scrollIntoViewIfNeeded();
-            await svg.click();
+            await svg.scrollIntoViewIfNeeded(); // Scroll to the SVG if necessary
+            await svg.click(); // Click the SVG
           } else {
-            console.log("Le SVG est détaché du document, passage au suivant.");
+            console.log("SVG detached from the document, moving to the next.");
           }
         } catch (error) {
-          console.log("Erreur lors du clic sur un SVG : ", error);
+          console.log("Error while clicking an SVG: ", error);
         }
       }
     }
   }
-  // Appel de la fonction pour cliquer sur tous les SVG enfants de tous les div.zenstyle-1d785g7, en ignorant le premier de chaque div
+
+  // Call the function to click all SVGs in specific divs
   await clickOnAllSvgInAllSpecificDivs();
 
-  // Fonction pour cliquer sur les SVG enfants des divs contenant un lien avec le texte "semaine"
-  async function clickSvgIfLinkContainsSemaine() {
-    // Attendre que les divs avec la classe 'zenstyle-1mwniey' soient chargés
-    await page.waitForSelector("div.zenstyle-1mwniey");
+  // Select SVG elements from parent divs containing the text "Semaine" and store their HTML
+  const svgElements = await page.evaluate(() => {
+    return Array.from(document.querySelectorAll("div.zenstyle-1o4t05n")) // Select parent divs
+      .filter((el) => el.innerText.includes("Semaine")) // Filter divs by inner text
+      .map((el) => el.parentElement) // Get parent elements
+      .map((parent) => Array.from(parent.querySelectorAll("svg")).slice(1)) // Select child SVGs, skip the first
+      .flat() // Flatten the array of SVGs
+      .map((svg) => svg.outerHTML); // Return outerHTML of each SVG
+  });
 
-    // Sélectionner tous les divs avec la classe 'zenstyle-1mwniey'
-    const divs = await page.$$("div.zenstyle-1mwniey");
+  // Loop through and click each SVG based on its outerHTML
+  for (const svg of svgElements) {
+    await page.evaluate((svgHTML) => {
+      const svgElement = Array.from(document.querySelectorAll("svg")).find((el) => el.outerHTML === svgHTML); // Find matching SVG
+      if (svgElement) {
+        const event = new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+        });
+        svgElement.dispatchEvent(event); // Simulate a click event
+      }
+    }, svg);
+  }
 
-    for (const div of divs) {
-      // Vérifier si ce div contient un lien avec le texte "semaine"
-      const hasSemaineLink = await div.evaluate((div) => {
-        const anchor = div.querySelector("a");
-        return anchor && anchor.textContent.includes("semaine");
-      });
+  // Function to get all <a> links inside a specific div
+  async function getAllLinksFromParentDiv() {
+    await page.waitForSelector("div.zenstyle-8lyrwn"); // Wait for the div to load
+    const links = await page.$$eval("div.zenstyle-8lyrwn a", (anchors) => anchors.map((anchor) => anchor.href)); // Get all hrefs
+    return links; // Return the list of links
+  }
 
-      if (hasSemaineLink) {
-        // Sélectionner tous les SVG enfants de ce div
-        const svgs = await div.$$("svg");
+  // Function to create a folder 'extract' if it doesn't exist
+  async function createExtractFolder() {
+    const dir = path.join(__dirname, "extract");
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir); // Create the directory if it doesn't exist
+    }
+  }
 
-        // Boucler sur chaque SVG et cliquer
-        for (const svg of svgs) {
-          try {
-            await svg.scrollIntoViewIfNeeded();
-            await svg.click();
-            console.log("SVG cliqué.");
-          } catch (error) {
-            console.log("Erreur lors du clic sur un SVG : ", error);
-          }
-        }
+  async function downloadVideo(videoUrl, outputPath, referer) {
+    const response = await axios({
+      method: "GET",
+      url: videoUrl,
+      responseType: "stream",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3",
+        "Referer": referer,
+        "Accept": "video/webm, video/mp4, application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+
+    return new Promise((resolve, reject) => {
+      const writer = fs.createWriteStream(outputPath);
+      response.data.pipe(writer);
+      writer.on("finish", resolve);
+      writer.on("error", reject);
+    });
+  }
+
+  // Mettre à jour checkForIframeAndDownload
+  async function checkForIframeAndDownload() {
+    const iframeSrc = await page.evaluate(() => {
+      const iframe = document.querySelector("iframe");
+      return iframe ? iframe.src : null;
+    });
+
+    if (iframeSrc) {
+      console.log("Found iframe with src: ${iframeSrc}");
+      const videoPath = path.join(__dirname, "extract", "video.mp4"); // Change le nom si nécessaire
+
+      try {
+        await downloadVideo(iframeSrc, videoPath);
+        console.log(`Video downloaded: ${videoPath}`);
+      } catch (error) {
+        console.error(`Error downloading video: ${error.message}`);
       }
     }
   }
 
-  // Appel de la fonction
-  await clickSvgIfLinkContainsSemaine();
-  // // Fonction pour récupérer tous les liens <a> enfants de div.zenstyle-8lyrwn
-  // async function getAllLinksFromParentDiv() {
-  //   // Attendre que le div avec la classe 'zenstyle-8lyrwn' soit chargé
-  //   await page.waitForSelector("div.zenstyle-8lyrwn");
+  async function capturePdfFromLinks(links) {
+    for (const link of links) {
+      try {
+        await page.goto(link);
+        await page.waitForSelector("#loader-1", { hidden: true });
 
-  //   // Sélectionner tous les liens <a> qui sont enfants de div.zenstyle-8lyrwn
-  //   const links = await page.$$eval(
-  //     "div.zenstyle-8lyrwn a",
-  //     (anchors) => anchors.map((anchor) => anchor.href) // Récupérer les href de chaque lien
-  //   );
+        await checkForIframeAndDownload();
 
-  //   return links; // Retourner la liste des liens
-  // }
+        const title = await page.title();
+        const safeTitle = title.replace(/[^a-z0-9]/gi, "_").toLowerCase() || "document"; // Titre par défaut
 
-  // // Fonction pour créer le dossier 'extract' s'il n'existe pas
-  // async function createExtractFolder() {
-  //   const dir = path.join(__dirname, "extract");
-  //   if (!fs.existsSync(dir)) {
-  //     fs.mkdirSync(dir);
-  //   }
-  // }
+        const pdfPath = path.join(__dirname, "extract", `${safeTitle}.pdf`);
 
-  // // Fonction pour aller sur chaque lien et réaliser une capture d'écran PDF
-  // async function capturePdfFromLinks(links) {
-  //   for (const link of links) {
-  //     try {
-  //       // Aller sur le lien
-  //       await page.goto(link);
+        await page.pdf({
+          path: pdfPath,
+          format: "A4",
+          printBackground: true,
+          margin: {
+            top: "20px",
+            right: "20px",
+            bottom: "20px",
+            left: "20px",
+          },
+          fullPage: true,
+        });
 
-  //       // Attendre que le spinner avec l'ID 'loader-1' soit disparu
-  //       await page.waitForSelector("#loader-1", { hidden: true });
+        console.log(`PDF created for: ${safeTitle}`);
+      } catch (error) {
+        console.log(`Error generating PDF for ${link}:`, error);
+      }
+    }
+  }
 
-  //       // Extraire le titre de la page
-  //       const title = await page.title();
-  //       const safeTitle = title.replace(/[^a-z0-9]/gi, "_").toLowerCase(); // Nettoyer le titre pour le nom de fichier
-
-  //       // Générer le PDF avec le titre comme nom de fichier
-  //       const pdfPath = path.join(__dirname, "extract", `${safeTitle}.pdf`);
-  //       await page.pdf({ path: pdfPath, format: "A4" });
-
-  //       console.log(`PDF créé pour : ${link} avec le titre : ${safeTitle}`);
-  //     } catch (error) {
-  //       console.log(`Erreur lors de la génération du PDF pour ${link} : `, error);
-  //     }
-  //   }
-  // }
-
-  // // Exemple d'utilisation de la fonction
-  // const allLinks = await getAllLinksFromParentDiv(); // Récupérer les liens
-  // console.log(allLinks); // Afficher les liens pour vérification
-
-  // await capturePdfFromLinks(allLinks);
+  const allLinks = await getAllLinksFromParentDiv(); // get all links from sidebar
+  await capturePdfFromLinks(allLinks); // Capture PDFs from links
 })();
